@@ -7,7 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-:root{--bg:#f4f7f0;--ink:#24301a;--accent:#4a7a1a;--line:#c8d3bb;--card:#fff}
+:root{--bg:#ffffff;--ink:#24301a;--accent:#4a7a1a;--line:#c8d3bb;--card:#fff}
 *{box-sizing:border-box}
 body{margin:0;padding:20px 16px 40px;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:640px;margin:0 auto}
@@ -59,6 +59,9 @@ pre{white-space:pre-wrap;word-break:break-word;background:#fff;border:1.5px soli
       <label>Texto del documento
         <textarea id="texto" required></textarea>
       </label>
+      <label>Frase bíblica (opcional)
+        <textarea id="frase" style="min-height:84px"></textarea>
+      </label>
       <label>Fecha
         <input id="fecha" type="date" required>
       </label>
@@ -66,7 +69,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:#fff;border:1.5px soli
         <label>Pastor
           <input id="pastor" required>
         </label>
-        <label>Co-Pastor
+        <label>Secretario
           <input id="copastor" required>
         </label>
       </div>
@@ -106,7 +109,8 @@ const COPASTOR = "Ismael Barceló Aispuro";
 // g = {o:"o"/"a", art:"el"/"la", t:"hermano"/"hermana"}
 const DOCS = {
   bautizo:      {titulo:"Certificado de Bautismo",      fondo:"fondos/bautizo.jpg", tituloEnImagen:true,
-    texto:g=>`${g.Art} ${g.t} arriba mencionad${g.o} confesó públicamente su fe en Jesucristo y fue bautizad${g.o} en aguas, conforme a la Palabra del Señor.`},
+    texto:()=>"Después de manifestar su Fe en Cristo Jesús y en conformidad\na lo que establecen las escrituras en el evangelio de Mateo 28:19",
+    frase:"Los que crean en mí y se bauticen, serán salvos.\nPero a los que no crean en mí, yo los voy a rechazar"},
   presentacion: {titulo:"Certificado de Presentación",  fondo:"fondos/presentacion.jpg",
     texto:g=>`${g.Art} ${g.t} arriba mencionad${g.o} fue presentad${g.o} ante el Señor y la congregación, siendo dedicad${g.o} con oración.`},
   recomendacion:{titulo:"Carta de Recomendación",       fondo:"fondos/recomendacion.jpg",
@@ -124,37 +128,66 @@ function hoy(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()
 function fechaLarga(v){const[y,m,d]=v.split("-").map(Number);return CIUDAD+" a "+d+" de "+MESES[m-1]+" de "+y}
 function genero(t){return t==="Hermana"?{o:"a",art:"la",Art:"La",t:"hermana"}:{o:"o",art:"el",Art:"El",t:"hermano"}}
 
-function dibujarPDF(pdf,d,x,img){
+const FUENTES=[["Carlito-Regular.ttf","Carlito","normal"],["Carlito-Bold.ttf","Carlito","bold"],["Kalam-Regular.ttf","Kalam","normal"]];
+async function cargarFuentes(pdf,leer){
+  try{
+    for(const [f,n,e] of FUENTES){pdf.addFileToVFS(f,await leer("fuentes/"+f));pdf.addFont(f,n,e)}
+    return {sans:"Carlito",script:"Kalam"};
+  }catch(err){return {sans:"helvetica",script:"times"}}
+}
+
+function dibujarPDF(pdf,d,x,img,F){
   const W=792,H=612,cx=W/2;
   if(img){pdf.addImage(img,/\.png$/i.test(d.fondo)?"PNG":"JPEG",0,0,W,H)}
   else{pdf.setDrawColor(74,122,26);pdf.setLineWidth(2);pdf.rect(22,22,W-44,H-44)}
   const conTitulo=!(img&&d.tituloEnImagen);
-  let y=conTitulo?120:322;
+  let y=conTitulo?120:334;
   pdf.setTextColor(40,40,40);
-  if(conTitulo){pdf.setFont("times","bold");pdf.setFontSize(30);pdf.text(d.titulo,cx,y,{align:"center"});y+=70}
+  if(conTitulo){pdf.setFont(F.sans,"bold");pdf.setFontSize(30);pdf.text(d.titulo,cx,y,{align:"center"});y+=68}
 
-  const nombre=x.nombre;
-  pdf.setFont("times","italic");let fs=30;pdf.setFontSize(fs);
-  while(fs>16&&pdf.getTextWidth(nombre)>640){fs--;pdf.setFontSize(fs)}
-  pdf.setTextColor(62,98,16);pdf.text(nombre,cx,y,{align:"center"});
-  pdf.setTextColor(40,40,40);y+=40;
+  // Nombre
+  pdf.setFont(F.sans,"normal");let fs=30;pdf.setFontSize(fs);
+  while(fs>16&&pdf.getTextWidth(x.nombre)>640){fs--;pdf.setFontSize(fs)}
+  pdf.text(x.nombre,cx,y,{align:"center"});
+  y+=40;
 
-  pdf.setFont("times","normal");
-  let lineas,tam=15;
-  for(const t of [15,13.5,12]){tam=t;pdf.setFontSize(t);lineas=pdf.splitTextToSize(x.texto,540);if(lineas.length<=5)break}
-  pdf.text(lineas,cx,y,{align:"center",lineHeightFactor:1.5});
+  // Descripción (negritas)
+  pdf.setFont(F.sans,"bold");
+  let lineas,lh;
+  for(const t of [15,14,13,12]){pdf.setFontSize(t);lineas=pdf.splitTextToSize(x.texto,500);lh=t*1.28;if(lineas.length<=4)break}
+  pdf.text(lineas,cx,y,{align:"center",lineHeightFactor:1.28});
+  y+=lineas.length*lh+12;
 
-  pdf.setFontSize(13);pdf.text(x.fechaTxt,cx,472,{align:"center"});
+  // Frase bíblica (letra manuscrita)
+  if(x.frase){
+    pdf.setFont(F.script,F.script==="Kalam"?"normal":"italic");pdf.setFontSize(13);
+    const fl=x.frase.split("\n").flatMap(l=>pdf.splitTextToSize(l,520));
+    pdf.text(fl,cx,y,{align:"center",lineHeightFactor:1.35});
+    y+=fl.length*16;
+  }
 
-  pdf.setLineWidth(0.8);pdf.setDrawColor(40,40,40);
-  pdf.line(155,524,345,524);pdf.line(447,524,637,524);
-  pdf.setFont("times","bold");pdf.setFontSize(12);
-  pdf.text("Pastor",250,538,{align:"center"});pdf.text("Co-Pastor",542,538,{align:"center"});
-  pdf.setFont("times","normal");
-  pdf.text(x.pastor,250,553,{align:"center",maxWidth:190});pdf.text(x.copastor,542,553,{align:"center",maxWidth:190});
+  // Fecha (serif)
+  pdf.setFont("times","normal");pdf.setFontSize(14);
+  pdf.text(x.fechaTxt,cx,Math.max(488,y+10),{align:"center"});
+
+  // Firmas: nombre en negritas y cargo en mayúsculas debajo
+  pdf.setTextColor(30,30,30);
+  const fir=(px,nom,cargo)=>{
+    pdf.setFont(F.sans,"bold");pdf.setFontSize(13);pdf.text(nom,px,551,{align:"center",maxWidth:210});
+    pdf.setFontSize(9);pdf.text(cargo,px,564,{align:"center"});
+  };
+  fir(310,x.pastor,"PASTOR");fir(590,x.copastor,"SECRETARIO");
 }
 // ==/PURO==
 
+const cacheF={};
+async function leerB64(p){
+  if(cacheF[p])return cacheF[p];
+  const r=await fetch(p);if(!r.ok)throw new Error(p);
+  const b=new Uint8Array(await r.arrayBuffer());let t="";
+  for(let i=0;i<b.length;i+=8192)t+=String.fromCharCode.apply(null,b.subarray(i,i+8192));
+  return cacheF[p]=btoa(t);
+}
 const $=id=>document.getElementById(id);
 let actual=null,textoEditado=false,pdfActual=null,nombreArchivo="certificado.pdf";
 const secciones=["home","editor","preview","registro"];
@@ -172,7 +205,7 @@ function abrir(k){
   $("lblTrat").hidden=!!d.sinTrat;
   $("trat").value="Hermano";$("nombre").value="";
   textoEditado=false;$("texto").value=textoPorDefecto();
-  $("fecha").value=hoy();$("pastor").value=PASTOR;$("copastor").value=COPASTOR;
+  $("frase").value=d.frase||"";$("fecha").value=hoy();$("pastor").value=PASTOR;$("copastor").value=COPASTOR;
   ver("editor");
 }
 $("trat").onchange=()=>{if(!textoEditado)$("texto").value=textoPorDefecto()};
@@ -222,10 +255,11 @@ $("form").onsubmit=async e=>{
   e.preventDefault();
   const d=DOCS[actual];
   const x={trat:d.sinTrat?"":$("trat").value,nombre:$("nombre").value.trim(),texto:$("texto").value.trim(),
-    fechaTxt:fechaLarga($("fecha").value),pastor:$("pastor").value.trim(),copastor:$("copastor").value.trim()};
+    frase:$("frase").value.trim(),fechaTxt:fechaLarga($("fecha").value),pastor:$("pastor").value.trim(),copastor:$("copastor").value.trim()};
   const img=await cargarImg(d.fondo);
   const pdf=new window.jspdf.jsPDF({unit:"pt",format:"letter",orientation:"landscape"});
-  dibujarPDF(pdf,d,x,img);
+  const F=await cargarFuentes(pdf,leerB64);
+  dibujarPDF(pdf,d,x,img,F);
   pdfActual=pdf;
   nombreArchivo=(d.titulo+" "+x.nombre).replace(/[^\wáéíóúüñÁÉÍÓÚÜÑ ]/g,"").replace(/\s+/g,"_")+".pdf";
   const ok=guardarReg([$("fecha").value,d.titulo,x.trat||"-",x.nombre].join(" | "));
