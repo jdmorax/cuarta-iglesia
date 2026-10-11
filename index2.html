@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Certificados y cartas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{--bg:#f4f7f0;--ink:#24301a;--accent:#4a7a1a;--line:#c8d3bb;--card:#fff}
+*{box-sizing:border-box}
+body{margin:0;padding:20px 16px 40px;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto}
+h1{font:600 1.9rem/1.2 Georgia,"Times New Roman",serif;margin:8px 0 6px}
+p.sub{margin:0 0 22px;color:#53633f}
+.menu{display:grid;gap:12px}
+button{font:inherit;cursor:pointer}
+.menu button{padding:18px 16px;text-align:left;font-size:1.05rem;font-weight:600;color:var(--ink);background:var(--card);border:1.5px solid var(--line);border-radius:10px}
+.menu button:hover,.menu button:focus-visible{border-color:var(--accent);outline:2px solid var(--accent);outline-offset:1px}
+form,.stack{display:grid;gap:14px}
+label{display:grid;gap:5px;font-weight:600;font-size:.95rem}
+input,textarea,select{font:inherit;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);width:100%}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+textarea{min-height:140px;resize:vertical}
+.row{display:grid;gap:14px}
+@media(min-width:520px){.row{grid-template-columns:1fr 1fr}}
+.primary,.secondary{padding:13px;border-radius:10px;font-weight:700;font-size:1.02rem;border:2px solid var(--accent)}
+.primary{background:var(--accent);color:#fff}
+.secondary{background:#fff;color:var(--accent)}
+.back{background:none;border:0;color:var(--accent);font-weight:600;padding:6px 0;margin-bottom:6px;text-align:left}
+.note{font-size:.85rem;color:#53633f;margin:0}
+.link{margin-top:22px;background:none;border:0;color:var(--accent);font-weight:600;padding:6px 0;text-decoration:underline}
+#canvas,#frame{width:100%;border:1px solid var(--line);background:#fff;display:block}
+#canvas{height:auto}
+#frame{height:70vh}
+pre{white-space:pre-wrap;word-break:break-word;background:#fff;border:1.5px solid var(--line);border-radius:8px;padding:12px;font-size:.85rem;max-height:50vh;overflow:auto;margin:0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <section id="home">
+    <h1>Certificados y cartas</h1>
+    <p class="sub">Elige el documento que quieres generar.</p>
+    <div class="menu" id="menu"></div>
+    <button class="link" id="verReg" type="button">Registro de nombres</button>
+  </section>
+
+  <section id="editor" hidden>
+    <button class="back" id="back" type="button">‹ Volver al inicio</button>
+    <h1 id="doctitle"></h1>
+    <form id="form" autocomplete="off">
+      <label id="lblTrat">Hermano o Hermana
+        <select id="trat"><option>Hermano</option><option>Hermana</option></select>
+      </label>
+      <label>Nombre completo
+        <input id="nombre" required>
+      </label>
+      <label>Texto del documento
+        <textarea id="texto" required></textarea>
+      </label>
+      <label>Fecha
+        <input id="fecha" type="date" required>
+      </label>
+      <div class="row">
+        <label>Pastor
+          <input id="pastor" required>
+        </label>
+        <label>Co-Pastor
+          <input id="copastor" required>
+        </label>
+      </div>
+      <button class="primary" type="submit">Generar PDF</button>
+    </form>
+  </section>
+
+  <section id="preview" hidden>
+    <button class="back" id="backEd" type="button">‹ Editar datos</button>
+    <h1>Vista previa</h1>
+    <div class="stack">
+      <canvas id="canvas" hidden></canvas>
+      <iframe id="frame" title="Vista previa del PDF" hidden></iframe>
+      <button class="primary" id="descargar" type="button">Descargar PDF</button>
+      <button class="secondary" id="abrir" type="button">Abrir PDF en otra pestaña</button>
+      <p class="note" id="msg" role="status"></p>
+    </div>
+  </section>
+
+  <section id="registro" hidden>
+    <button class="back" id="backReg" type="button">‹ Volver al inicio</button>
+    <h1>Registro de nombres</h1>
+    <div class="stack">
+      <p class="note">Se guarda en este navegador, en un archivo de texto interno. Una línea por persona: fecha, documento, hermano/a y nombre.</p>
+      <pre id="regTxt"></pre>
+      <button class="primary" id="regDesc" type="button">Descargar registro (.txt)</button>
+      <button class="secondary" id="regBorrar" type="button">Borrar registro</button>
+    </div>
+  </section>
+</main>
+
+<script>
+// ====== CONFIGURACIÓN ======
+const CIUDAD = "Culiacán Sinaloa";
+const PASTOR = "Rogelio Rocha García";
+const COPASTOR = "Ismael Barceló Aispuro";
+// g = {o:"o"/"a", art:"el"/"la", t:"hermano"/"hermana"}
+const DOCS = {
+  bautizo:      {titulo:"Certificado de Bautismo",      fondo:"fondos/bautizo.jpg", tituloEnImagen:true,
+    texto:()=>`Después de manifestar su Fe en Cristo Jesús y en conformidad a lo que establecen las escrituras en el evangelio de Mateo 28:19`},
+  presentacion: {titulo:"Certificado de Presentación",  fondo:"fondos/presentacion.jpg",
+    texto:g=>`${g.Art} ${g.t} arriba mencionad${g.o} fue presentad${g.o} ante el Señor y la congregación, siendo dedicad${g.o} con oración.`},
+  recomendacion:{titulo:"Carta de Recomendación",       fondo:"fondos/recomendacion.jpg",
+    texto:g=>`A quien corresponda: Por medio de la presente recomendamos ampliamente a ${g.art} ${g.t} arriba mencionad${g.o}, miembro de nuestra congregación y de buen testimonio.`},
+  traslado:     {titulo:"Carta de Traslado",            fondo:"fondos/traslado.jpg",
+    texto:g=>`A quien corresponda: Por medio de la presente hacemos constar que ${g.art} ${g.t} arriba mencionad${g.o} es miembro en plena comunión de nuestra congregación y se le otorga su carta de traslado.`},
+  matrimonio:   {titulo:"Certificado de Matrimonio",    fondo:"fondos/matrimonio.jpg", sinTrat:true,
+    texto:()=>`Por medio del presente se certifica que los contrayentes arriba mencionados unieron sus vidas en santo matrimonio ante Dios y la congregación.`}
+};
+// ===========================
+
+// ==PURO==
+const MESES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+function hoy(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function fechaLarga(v){const[y,m,d]=v.split("-").map(Number);return CIUDAD+" a "+d+" de "+MESES[m-1]+" de "+y}
+function genero(t){return t==="Hermana"?{o:"a",art:"la",Art:"La",t:"hermana"}:{o:"o",art:"el",Art:"El",t:"hermano"}}
+
+function dibujarPDF(pdf,d,x,img){
+  const W=792,H=612,cx=W/2;
+  if(img){pdf.addImage(img,/\.png$/i.test(d.fondo)?"PNG":"JPEG",0,0,W,H)}
+  else{pdf.setDrawColor(74,122,26);pdf.setLineWidth(2);pdf.rect(22,22,W-44,H-44)}
+  const conTitulo=!(img&&d.tituloEnImagen);
+  let y=conTitulo?120:180;
+  pdf.setTextColor(40,40,40);
+  if(conTitulo){pdf.setFont("times","bold");pdf.setFontSize(30);pdf.text(d.titulo,cx,y,{align:"center"});y+=70}
+
+  // Nombre principal
+  const nombre=x.nombre;
+  pdf.setFont("times","normal");let fs=32;pdf.setFontSize(fs);
+  while(fs>16&&pdf.getTextWidth(nombre)>640){fs--;pdf.setFontSize(fs)}
+  pdf.setTextColor(30,30,30);pdf.text(nombre,cx,y,{align:"center"});
+  y+=45;
+
+  // Texto de la descripción (Estilo sans-serif bold similar a la muestra)
+  pdf.setFont("helvetica","bold");
+  let lineas,tam=18;
+  for(const t of [18,16,14]){tam=t;pdf.setFontSize(t);lineas=pdf.splitTextToSize(x.texto,560);if(lineas.length<=3)break}
+  pdf.setTextColor(45,45,45);
+  pdf.text(lineas,cx,y,{align:"center",lineHeightFactor:1.3});
+
+  // Fecha
+  pdf.setFont("times","normal");pdf.setFontSize(14);pdf.text(x.fechaTxt,cx,450,{align:"center"});
+
+  // Firmas y nombres de Pastor y Co-Pastor
+  pdf.setFont("helvetica","bold");pdf.setFontSize(14);pdf.setTextColor(30,30,30);
+  pdf.text(x.pastor,220,530,{align:"center",maxWidth:220});
+  pdf.text(x.copastor,570,530,{align:"center",maxWidth:220});
+
+  pdf.setFont("helvetica","normal");pdf.setFontSize(11);pdf.setTextColor(70,70,70);
+  pdf.text("PASTOR",220,546,{align:"center"});
+  pdf.text("CO-PASTOR",570,546,{align:"center"});
+}
+// ==/PURO==
+
+const $=id=>document.getElementById(id);
+let actual=null,textoEditado=false,pdfActual=null,nombreArchivo="certificado.pdf";
+const secciones=["home","editor","preview","registro"];
+function ver(id){secciones.forEach(s=>$(s).hidden=s!==id);window.scrollTo(0,0)}
+
+Object.entries(DOCS).forEach(([k,d])=>{
+  const b=document.createElement("button");b.type="button";b.textContent=d.titulo;
+  b.onclick=()=>abrir(k);$("menu").appendChild(b);
+});
+
+function textoPorDefecto(){const d=DOCS[actual];return d.texto(genero($("trat").value))}
+function abrir(k){
+  actual=k;const d=DOCS[k];
+  $("doctitle").textContent=d.titulo;
+  $("lblTrat").hidden=!!d.sinTrat;
+  $("trat").value="Hermano";$("nombre").value="";
+  textoEditado=false;$("texto").value=textoPorDefecto();
+  $("fecha").value=hoy();$("pastor").value=PASTOR;$("copastor").value=COPASTOR;
+  ver("editor");
+}
+$("trat").onchange=()=>{if(!textoEditado)$("texto").value=textoPorDefecto()};
+$("texto").oninput=()=>{textoEditado=true};
+$("back").onclick=()=>ver("home");
+$("backEd").onclick=()=>ver("editor");
+
+// ---- Registro interno (archivo de texto guardado en el navegador) ----
+const CLAVE="registro_miembros_txt";
+function leerReg(){try{return localStorage.getItem(CLAVE)||""}catch(e){return ""}}
+function guardarReg(linea){
+  try{
+    const t=leerReg();
+    if(t.split("\n").includes(linea))return true;
+    localStorage.setItem(CLAVE,t?t+"\n"+linea:linea);return true;
+  }catch(e){return false}
+}
+function descargarTexto(nombre,txt){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([txt],{type:"text/plain;charset=utf-8"}));
+  a.download=nombre;document.body.appendChild(a);a.click();a.remove();
+}
+function mostrarReg(){$("regTxt").textContent=leerReg()||"(Aún no hay nombres guardados)";ver("registro")}
+$("verReg").onclick=mostrarReg;
+$("backReg").onclick=()=>ver("home");
+$("regDesc").onclick=()=>descargarTexto("registro_miembros.txt",leerReg()||"");
+$("regBorrar").onclick=()=>{if(confirm("¿Borrar todo el registro de nombres de este navegador?")){try{localStorage.removeItem(CLAVE)}catch(e){}mostrarReg()}};
+
+// ---- PDF ----
+function cargarImg(src){return new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src})}
+
+async function vistaPrevia(pdf){
+  $("canvas").hidden=true;$("frame").hidden=true;
+  try{
+    pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    const doc=await pdfjsLib.getDocument({data:new Uint8Array(pdf.output("arraybuffer"))}).promise;
+    const pg=await doc.getPage(1),vp=pg.getViewport({scale:2}),cv=$("canvas");
+    cv.width=vp.width;cv.height=vp.height;
+    await pg.render({canvasContext:cv.getContext("2d"),viewport:vp}).promise;
+    cv.hidden=false;
+  }catch(e){
+    $("frame").src=pdf.output("bloburl");$("frame").hidden=false;
+  }
+}
+
+$("form").onsubmit=async e=>{
+  e.preventDefault();
+  const d=DOCS[actual];
+  const x={trat:d.sinTrat?"":$("trat").value,nombre:$("nombre").value.trim(),texto:$("texto").value.trim(),
+    fechaTxt:fechaLarga($("fecha").value),pastor:$("pastor").value.trim(),copastor:$("copastor").value.trim()};
+  const img=await cargarImg(d.fondo);
+  const pdf=new window.jspdf.jsPDF({unit:"pt",format:"letter",orientation:"landscape"});
+  dibujarPDF(pdf,d,x,img);
+  pdfActual=pdf;
+  nombreArchivo=(d.titulo+" "+x.nombre).replace(/[^\wáéíóúüñÁÉÍÓÚÜÑ ]/g,"").replace(/\s+/g,"_")+".pdf";
+  const ok=guardarReg([$("fecha").value,d.titulo,x.trat||"-",x.nombre].join(" | "));
+  $("msg").textContent=(img?"":"No se encontró la imagen de fondo. ")+(ok?"El nombre se guardó en el registro.":"No se pudo guardar el nombre en el registro de este navegador.");
+  ver("preview");
+  await vistaPrevia(pdf);
+};
+$("descargar").onclick=()=>pdfActual&&pdfActual.save(nombreArchivo);
+$("abrir").onclick=()=>pdfActual&&window.open(pdfActual.output("bloburl"),"_blank");
+</script>
+</body>
+</html>
