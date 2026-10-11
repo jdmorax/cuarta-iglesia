@@ -128,55 +128,59 @@ function hoy(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()
 function fechaLarga(v){const[y,m,d]=v.split("-").map(Number);return CIUDAD+" a "+d+" de "+MESES[m-1]+" de "+y}
 function genero(t){return t==="Hermana"?{o:"a",art:"la",Art:"La",t:"hermana"}:{o:"o",art:"el",Art:"El",t:"hermano"}}
 
-const FUENTES=[["Carlito-Regular.ttf","Carlito","normal"],["Carlito-Bold.ttf","Carlito","bold"],["Kalam-Regular.ttf","Kalam","normal"]];
+const FUENTES=[["Pagella-Regular.ttf","Pagella","normal"],["Pagella-Bold.ttf","Pagella","bold"],["Kalam-Regular.ttf","Kalam","normal"]];
 async function cargarFuentes(pdf,leer){
   try{
     for(const [f,n,e] of FUENTES){pdf.addFileToVFS(f,await leer("fuentes/"+f));pdf.addFont(f,n,e)}
-    return {sans:"Carlito",script:"Kalam"};
-  }catch(err){return {sans:"helvetica",script:"times"}}
+    return {serif:"Pagella",script:"Kalam"};
+  }catch(err){return {serif:"times",script:"times"}}
 }
 
+// Posiciones (en puntos, hoja carta horizontal 792 x 612) tomadas del certificado impreso
 function dibujarPDF(pdf,d,x,img,F){
   const W=792,H=612,cx=W/2;
   if(img){pdf.addImage(img,/\.png$/i.test(d.fondo)?"PNG":"JPEG",0,0,W,H)}
   else{pdf.setDrawColor(74,122,26);pdf.setLineWidth(2);pdf.rect(22,22,W-44,H-44)}
   const conTitulo=!(img&&d.tituloEnImagen);
-  let y=conTitulo?120:334;
-  pdf.setTextColor(40,40,40);
-  if(conTitulo){pdf.setFont(F.sans,"bold");pdf.setFontSize(30);pdf.text(d.titulo,cx,y,{align:"center"});y+=68}
+  let y=conTitulo?125:338;
+  pdf.setTextColor(35,35,35);
+  if(conTitulo){pdf.setFont(F.serif,"bold");pdf.setFontSize(30);pdf.text(d.titulo,cx,y,{align:"center"});y+=75}
 
-  // Nombre
-  pdf.setFont(F.sans,"normal");let fs=30;pdf.setFontSize(fs);
+  // Nombre (letra con serifas)
+  pdf.setFont(F.serif,"normal");let fs=30;pdf.setFontSize(fs);
   while(fs>16&&pdf.getTextWidth(x.nombre)>640){fs--;pdf.setFontSize(fs)}
   pdf.text(x.nombre,cx,y,{align:"center"});
-  y+=40;
+  y+=52;
 
   // Descripción (negritas)
-  pdf.setFont(F.sans,"bold");
+  pdf.setTextColor(20,20,20);
+  pdf.setFont(F.serif,"bold");
   let lineas,lh;
-  for(const t of [15,14,13,12]){pdf.setFontSize(t);lineas=pdf.splitTextToSize(x.texto,500);lh=t*1.28;if(lineas.length<=4)break}
-  pdf.text(lineas,cx,y,{align:"center",lineHeightFactor:1.28});
-  y+=lineas.length*lh+12;
+  for(const t of [15,14,13,12]){pdf.setFontSize(t);lineas=pdf.splitTextToSize(x.texto,520);lh=t*1.3;if(lineas.length<=4)break}
+  pdf.text(lineas,cx,y,{align:"center",lineHeightFactor:1.3});
+  y+=(lineas.length-1)*lh+48;
 
   // Frase bíblica (letra manuscrita)
   if(x.frase){
+    pdf.setTextColor(35,35,35);
     pdf.setFont(F.script,F.script==="Kalam"?"normal":"italic");pdf.setFontSize(13);
-    const fl=x.frase.split("\n").flatMap(l=>pdf.splitTextToSize(l,520));
-    pdf.text(fl,cx,y,{align:"center",lineHeightFactor:1.35});
-    y+=fl.length*16;
+    const fl=x.frase.split("\n").flatMap(l=>pdf.splitTextToSize(l,540));
+    pdf.text(fl,cx,y,{align:"center",lineHeightFactor:1.3});
+    y+=(fl.length-1)*17+8;
   }
 
-  // Fecha (serif)
-  pdf.setFont("times","normal");pdf.setFontSize(14);
-  pdf.text(x.fechaTxt,cx,Math.max(488,y+10),{align:"center"});
+  // Fecha
+  pdf.setTextColor(35,35,35);
+  pdf.setFont(F.serif,"normal");pdf.setFontSize(15);
+  pdf.text(x.fechaTxt,cx,Math.max(500,y+26),{align:"center"});
 
-  // Firmas: nombre en negritas y cargo en mayúsculas debajo
-  pdf.setTextColor(30,30,30);
+  // Firmas: espacio para firmar a mano; nombre y cargo debajo
+  pdf.setTextColor(20,20,20);
   const fir=(px,nom,cargo)=>{
-    pdf.setFont(F.sans,"bold");pdf.setFontSize(13);pdf.text(nom,px,551,{align:"center",maxWidth:210});
-    pdf.setFontSize(9);pdf.text(cargo,px,564,{align:"center"});
+    pdf.setFont(F.serif,"bold");pdf.setFontSize(13);pdf.text(nom,px,570,{align:"center",maxWidth:220});
+    pdf.setFont(F.serif,"bold");pdf.setFontSize(9);pdf.text(cargo,px,587,{align:"center"});
   };
-  fir(310,x.pastor,"PASTOR");fir(590,x.copastor,"SECRETARIO");
+  fir(312,x.pastor,"PASTOR");fir(606,x.copastor,"SECRETARIO");
 }
 // ==/PURO==
 
